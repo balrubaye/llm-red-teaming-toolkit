@@ -8,19 +8,10 @@
 ![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue)
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange)
 
-**Status:** v0.1 — red-team focused, local Ollama only. See [SPEC.md](SPEC.md)
-for the full design and roadmap. The full eval-runner layer arrives in v0.3.
+**Status:** v0.1 — red-team focused, local Ollama only. The full eval-runner layer arrives in v0.3.
 
 ## Why Reagent
 
-Three things competitors don't combine well:
-
-- **[promptfoo](https://github.com/promptfoo/promptfoo)** has great DX for
-  assertions and diffing, but the red-team suite is gated behind a paid tier.
-- **[garak](https://github.com/NVIDIA/garak)** has the strongest attack library
-  but a thin regression-and-CI story.
-- **[Inspect AI](https://github.com/UKGovernmentBEIS/inspect_ai)** has the most
-  rigorous eval methodology but is heavy and research-flavored.
 
 Reagent's wedge is the bundle: **statistically meaningful regression diffs +
 maintained red-team corpus + first-class CI**, all under Apache-2.0.
