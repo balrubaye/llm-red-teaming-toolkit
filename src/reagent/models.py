@@ -171,17 +171,33 @@ AssertionDef = Annotated[
 class OwaspLLM(str, Enum):
     """OWASP LLM Top 10 (2025 ed.) classes that are prompt-testable.
 
-    LLM03 (supply chain), LLM04 (data poisoning), LLM08 (vector weakness), and
-    LLM10 (unbounded consumption) are system-level and not directly testable via
-    single-turn prompting, so they are omitted from v0.1.
+    LLM04 (data poisoning) and LLM08 (vector weakness) are system-level
+    and not directly testable via single-turn prompting, so they are omitted.
     """
 
     LLM01 = "LLM01:PromptInjection"
     LLM02 = "LLM02:SensitiveInformationDisclosure"
+    LLM03 = "LLM03:Model/SystemSupplyChain"
     LLM05 = "LLM05:ImproperOutputHandling"
     LLM06 = "LLM06:ExcessiveAgency"
     LLM07 = "LLM07:SystemPromptLeakage"
     LLM09 = "LLM09:Misinformation"
+    LLM10 = "LLM10:UnboundedConsumption"
+
+    @property
+    def remediation(self) -> str:
+        """Actionable remediation guidance for the vulnerability."""
+        advice = {
+            self.LLM01: "Use robust system prompts, clearly separate instructions from user data (e.g. XML tags), or use a secondary LLM as an input guardrail.",
+            self.LLM02: "Implement robust data redaction/scrubbing for PII/credentials before sending to the model, and restrict training data.",
+            self.LLM03: "Validate and sanitize data retrieved from third-party sources or external dependencies before passing it to the model.",
+            self.LLM05: "Treat LLM output as untrusted. Sanitize, encode, and validate all outputs before passing them to downstream systems or users (e.g., HTML escaping, parameterized SQL).",
+            self.LLM06: "Enforce principle of least privilege for LLM tool access. Require human-in-the-loop validation for high-stakes actions.",
+            self.LLM07: "System prompts should be considered public. Do not store secrets or proprietary logic in them. Filter outputs for system prompt markers.",
+            self.LLM09: "Ground the model with factual context (RAG), adjust temperature for lower variance, and cite sources.",
+            self.LLM10: "Enforce strict token generation limits, implement request timeouts, and monitor anomalous usage spikes.",
+        }
+        return advice.get(self, "No specific remediation advice available.")
 
 
 class Severity(str, Enum):
@@ -204,6 +220,8 @@ class AttackClass(str, Enum):
     OUTPUT_INJECTION = "output-injection"
     TOOL_CONFUSION = "tool-confusion"
     MISINFORMATION_ELICITATION = "misinformation-elicitation"
+    SUPPLY_CHAIN_HIJACK = "supply-chain-hijack"
+    DENIAL_OF_SERVICE = "denial-of-service"
 
 
 class AttackOutcome(str, Enum):

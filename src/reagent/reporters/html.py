@@ -170,15 +170,33 @@ _TEMPLATE = """<!doctype html>
             <tr>
               <td><code>{{ a.kind }}</code>{% if a.label %} — {{ a.label }}{% endif %}</td>
               <td>
-                {% if a.error %}<span class="pill fail">ERR</span>
-                {% elif a.passed %}<span class="pill pass">PASS</span>
-                {% else %}<span class="pill fail">FAIL</span>{% endif %}
+                {% if a.error %}
+                  <span class="pill fail">ERR</span>
+                {% elif scorecard.is_redteam %}
+                  {% if a.passed %}
+                    <span class="pill fail">VULN DETECTED</span>
+                  {% else %}
+                    <span class="pill pass">SAFE</span>
+                  {% endif %}
+                {% else %}
+                  {% if a.passed %}
+                    <span class="pill pass">PASS</span>
+                  {% else %}
+                    <span class="pill fail">FAIL</span>
+                  {% endif %}
+                {% endif %}
               </td>
               <td>{{ a.error or a.detail or '' }}{% if a.score is not none %} (score={{ "%.2f"|format(a.score) }}){% endif %}</td>
             </tr>
           {% endfor %}
           </tbody>
         </table>
+      {% endif %}
+      {% if not c.passed and not c.skipped and c.owasp %}
+        <div style="margin:16px 0 8px; padding:12px; background:rgba(255,107,107,0.06); border-left:3px solid var(--fail); border-radius:4px;">
+          <h3 style="font-size:13px; margin:0 0 6px; color:var(--fail);">Recommended Fix</h3>
+          <p style="margin:0; font-size:13px;">{{ c.owasp.remediation }}</p>
+        </div>
       {% endif %}
     </details>
   {% endfor %}

@@ -54,12 +54,20 @@ def _failed_cases_table(cases: list[CaseResult], limit: int = 20) -> str:
         if c.error:
             reason = f"error: {c.error}"
         else:
-            # Highlight the first failing assertion.
-            failing = next((a for a in c.assertion_results if not a.passed), None)
-            if failing is not None:
-                reason = f"`{failing.kind}` failed — {failing.detail or failing.error or ''}"
+            if c.owasp is not None:
+                # Red-team case: failure means the attack succeeded, so an assertion matched.
+                triggering = next((a for a in c.assertion_results if a.passed), None)
+                if triggering is not None:
+                    reason = f"Vulnerability detected via `{triggering.kind}` — {triggering.detail or triggering.error or ''}"
+                else:
+                    reason = "—"
             else:
-                reason = "—"
+                # Quality case: failure means an assertion did not match.
+                triggering = next((a for a in c.assertion_results if not a.passed), None)
+                if triggering is not None:
+                    reason = f"`{triggering.kind}` failed — {triggering.detail or triggering.error or ''}"
+                else:
+                    reason = "—"
         lines.append(f"| `{c.case_id}` | {owasp} | {sev} | {_truncate(reason, 160)} |")
     lines.append("")
     return "\n".join(lines)
@@ -79,6 +87,30 @@ def _owasp_table(scorecard: Scorecard) -> str:
             f"| {b.owasp.value} | {b.cases} | {b.defended} | "
             f"{_fmt_pct(b.defense_rate)} | {_fmt_ci(b.defense_rate_ci_95)} |"
         )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _remediation_tips(cases: list[CaseResult]) -> str:
+    failed = [c for c in cases if not c.passed and not c.skipped and c.owasp]
+    if not failed:
+        return ""
+
+    tips = {}
+    for c in failed:
+        if c.owasp not in tips:
+            tips[c.owasp] = c.owasp.remediation
+
+    if not tips:
+        return ""
+
+    lines = [
+        "### Remediation Tips",
+        "",
+    ]
+    for owasp, advice in tips.items():
+        lines.append(f"- **{owasp.value}**: {advice}")
+
     lines.append("")
     return "\n".join(lines)
 
@@ -115,6 +147,10 @@ def render_markdown(scorecard: Scorecard, path: str | Path | None = None) -> str
         parts.append(_owasp_table(scorecard))
 
     parts.append(_failed_cases_table(scorecard.cases))
+
+    remediation_section = _remediation_tips(scorecard.cases)
+    if remediation_section:
+        parts.append(remediation_section)
 
     text = "\n".join(parts)
     if path is not None:
