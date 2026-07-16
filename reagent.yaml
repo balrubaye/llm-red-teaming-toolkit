@@ -1,0 +1,26 @@
+# Reagent Enterprise Configuration
+# This file allows you to track your AI safety compliance targets in version control.
+
+target:
+  type: system_ui
+  url: "http://localhost:3000"
+
+corpus:
+  # The built-in open-source corpus is always loaded.
+  # Enterprises can add their private payloads here:
+  extra_cases: []
+    # - "./internal_security_tests/"
+
+compliance:
+  # Automatically filter tests by these frameworks
+  frameworks:
+    - owasp_top10
+    - mitre_atlas
+    - nist_ai_rmf
+  
+  # Ignore low-severity bugs in fast CI/CD pipelines
+  minimum_severity: high 
+
+judge:
+  model: "openai:gpt-4o-mini"
+  temperature: 0.0
