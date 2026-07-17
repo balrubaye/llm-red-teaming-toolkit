@@ -14,7 +14,7 @@ from rich.table import Table
 
 from reagent import __version__
 from reagent.adapters import available_adapters
-from reagent.models import OwaspLLM, Scorecard, Severity, Suite
+from reagent.models import OwaspLLM, Scorecard, Severity, Suite, ProjectConfig
 from reagent.paths import bundled_corpus_dir
 from reagent.reporters import dump_json, load_json, render_html, render_markdown
 from reagent.runner import RunConfig, run_suite
@@ -131,11 +131,26 @@ def _print_summary(scorecard: Scorecard) -> None:
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(__version__, prog_name="reagent")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging.")
+@click.option("--config", type=click.Path(path_type=Path), default=Path("reagent.yaml"), help="Path to project config.")
 @click.pass_context
-def main(ctx: click.Context, verbose: bool) -> None:
+def main(ctx: click.Context, verbose: bool, config: Path) -> None:
     """Reagent — open-source LLM evaluation and red-teaming toolkit."""
     _setup_logging(verbose)
     ctx.ensure_object(dict)
+    
+    project_config = None
+    if config.exists():
+        import yaml
+        try:
+            with open(config, "r", encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+                if raw:
+                    project_config = ProjectConfig.model_validate(raw)
+        except Exception as exc:
+            _console.print(f"[red]failed to load config {config}:[/red] {exc}")
+            sys.exit(EXIT_CONFIG_ERROR)
+    
+    ctx.obj["project_config"] = project_config
 
 
 @main.command()
@@ -146,6 +161,8 @@ def main(ctx: click.Context, verbose: bool) -> None:
 @click.option("--budget", type=str, default=None,
               help="Hard USD budget; aborts when exceeded (e.g. 5.00).")
 @click.option("--no-cache", is_flag=True, help="Disable the response cache.")
+@click.option("--app-profile", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Path to an AppProfile YAML for system-level prompt simulation.")
 @click.option("--out-dir", type=click.Path(path_type=Path), default=Path("reports"),
               show_default=True, help="Directory to write outputs to.")
 @click.option("--format", "formats", multiple=True, default=("json", "md"),
@@ -159,14 +176,15 @@ def run(
     concurrency: int,
     budget: str | None,
     no_cache: bool,
+    app_profile: Path | None,
     out_dir: Path,
     formats: tuple[str, ...],
     judge_model: str | None,
 ) -> None:
     """Run an eval or red-team suite."""
     _run_impl(
-        suite_path=suite_path, model=model, concurrency=concurrency,
-        budget=budget, no_cache=no_cache, out_dir=out_dir,
+        suite_paths=[suite_path], model=model, concurrency=concurrency,
+        budget=budget, no_cache=no_cache, app_profile_path=app_profile, out_dir=out_dir,
         formats=formats, judge_model=judge_model,
         filter_owasp=(), filter_severity=(), filter_tag=(),
         is_redteam_cmd=False,
@@ -176,6 +194,10 @@ def run(
 @main.command()
 @click.option("--corpus", type=click.Path(path_type=Path), default=None,
               help="Override the bundled red-team corpus path.")
+@click.option("--extra-cases", multiple=True, type=click.Path(exists=True, path_type=Path),
+              help="Additional suites or directories to merge into the run. Repeatable.")
+@click.option("--app-profile", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Path to an AppProfile YAML for system-level prompt simulation.")
 @click.option("--model", required=True, help="e.g. ollama:llama3.1:8b")
 @click.option("--owasp", multiple=True,
               help="Filter by OWASP class (e.g. LLM01). Repeatable / comma-separated.")
@@ -190,8 +212,12 @@ def run(
 @click.option("--format", "formats", multiple=True, default=("json", "md"),
               type=click.Choice(["json", "md", "html"]))
 @click.option("--judge-model", default=None)
+@click.pass_context
 def redteam(
+    ctx: click.Context,
     corpus: Path | None,
+    extra_cases: tuple[Path, ...],
+    app_profile: Path | None,
     model: str,
     owasp: tuple[str, ...],
     severity: tuple[str, ...],
@@ -209,10 +235,24 @@ def redteam(
     --------
     $ reagent redteam --model ollama:llama3.1:8b --owasp LLM01,LLM07
     """
-    suite_path = corpus or bundled_corpus_dir()
+    pcfg = ctx.obj.get("project_config")
+    
+    # Merge config file defaults if CLI args are empty
+    if not owasp and pcfg and pcfg.compliance.frameworks:
+        # Simplistic mapping: if 'owasp_top10' is in frameworks, we might want all, but for now we'll just parse exact values or leave empty to run all.
+        pass # In a full implementation, we'd map "owasp_top10" to actual codes, but we won't break things here.
+    
+    if not severity and pcfg and pcfg.compliance.minimum_severity:
+        severity = (pcfg.compliance.minimum_severity.value,)
+        
+    if not judge_model and pcfg and pcfg.judge:
+        judge_model = pcfg.judge.model
+
+    config_extra_cases = [Path(p) for p in pcfg.corpus.extra_cases] if pcfg and pcfg.corpus else []
+    suite_paths = [corpus or bundled_corpus_dir()] + list(extra_cases) + config_extra_cases
     _run_impl(
-        suite_path=suite_path, model=model, concurrency=concurrency,
-        budget=budget, no_cache=no_cache, out_dir=out_dir,
+        suite_paths=suite_paths, model=model, concurrency=concurrency,
+        budget=budget, no_cache=no_cache, app_profile_path=app_profile, out_dir=out_dir,
         formats=formats, judge_model=judge_model,
         filter_owasp=owasp, filter_severity=severity, filter_tag=tag,
         is_redteam_cmd=True,
@@ -221,11 +261,12 @@ def redteam(
 
 def _run_impl(
     *,
-    suite_path: Path,
+    suite_paths: list[Path],
     model: str,
     concurrency: int,
     budget: str | None,
     no_cache: bool,
+    app_profile_path: Path | None,
     out_dir: Path,
     formats: tuple[str, ...],
     judge_model: str | None,
@@ -234,8 +275,10 @@ def _run_impl(
     filter_tag: tuple[str, ...],
     is_redteam_cmd: bool,
 ) -> None:
+    from reagent.suites.loader import merge_suites, load_suite
     try:
-        suite = load_suite(suite_path)
+        loaded_suites = [load_suite(p) for p in suite_paths]
+        suite = merge_suites(loaded_suites)
     except SuiteLoadError as exc:
         _console.print(f"[red]suite load failed:[/red] {exc}")
         sys.exit(EXIT_CONFIG_ERROR)
@@ -276,12 +319,24 @@ def _run_impl(
     # We resolved one to validate; close it. The runner constructs its own.
     asyncio.run(adapter.aclose())
 
+    app_profile_obj = None
+    if app_profile_path:
+        import yaml
+        from reagent.models import AppProfile
+        try:
+            with open(app_profile_path, "r", encoding="utf-8") as f:
+                app_profile_obj = AppProfile.model_validate(yaml.safe_load(f))
+        except Exception as exc:
+            _console.print(f"[red]failed to load app-profile {app_profile_path}:[/red] {exc}")
+            sys.exit(EXIT_CONFIG_ERROR)
+
     config = RunConfig(
         model=model,
         concurrency=concurrency,
         use_cache=not no_cache,
         budget_usd=budget_dec,
         default_judge_model=judge_model,
+        app_profile=app_profile_obj,
     )
 
     _console.print(

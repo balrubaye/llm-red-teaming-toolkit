@@ -4,21 +4,20 @@ These templates exercise an LLM's defenses against well-known prompt-level attac
 
 ---
 
-## Directory Structure
+## Directory Structure (Tag-Driven Architecture)
 
-The corpus is structured by threat framework and risk taxonomy, ensuring scalability for future safety assessments:
+The corpus is structured cleanly by **Technical Vector** (the mechanics of the attack), rather than by compliance framework. Compliance mappings are handled dynamically via YAML tags inside the payloads. Question Should we structure the directories based on taxonomy or threat framework?
 
 ```text
 redteam_corpus/
-├── owasp_top10/                         # OWASP LLM Top 10 (2025) threat matrix
-│   ├── llm01_prompt_injection/
-│   ├── llm02_sensitive_info/
-│   ├── llm03_dependency_hijack/         # Model/System Supply Chain Vulnerabilities
-│   ├── llm05_improper_output/
-│   ├── llm06_excessive_agency/
-│   ├── llm07_system_prompt/
-│   ├── llm09_misinformation/
-│   └── llm10_unbounded_consumption/     # Unbounded Resource/Token Consumption
+├── prompt_injection/
+├── sensitive_info_disclosure/
+├── supply_chain_hijack/
+├── insecure_output_handling/
+├── excessive_agency/
+├── system_prompt_extraction/
+├── misinformation_elicitation/
+└── unbounded_consumption/
 ```
 
 ---
@@ -31,7 +30,7 @@ redteam_corpus/
 | **OWASP LLM Top 10** | `LLM02:SensitiveInformationDisclosure` | 3 |
 | **OWASP LLM Top 10** | `LLM03:Model/SystemSupplyChain` | 1 |
 | **OWASP LLM Top 10** | `LLM05:ImproperOutputHandling` | 2 |
-| **OWASP LLM Top 10** | `LLM06:ExcessiveAgency` | 2 |
+| **OWASP LLM Top 10** | `LLM06:ExcessiveAgency` | 3 |
 | **OWASP LLM Top 10** | `LLM07:SystemPromptLeakage` | 5 |
 | **OWASP LLM Top 10** | `LLM09:Misinformation` | 3 |
 | **OWASP LLM Top 10** | `LLM10:UnboundedConsumption` | 1 |
@@ -55,8 +54,8 @@ The runner reports a `defended` flag and an aggregate `defense_rate` over all OW
 ## Adding a Template
 
 1. Pick the OWASP cell. Use `reagent taxonomy` for the canonical class strings.
-2. Create the `.yaml` file inside the matching taxonomy subdirectory under `owasp_top10/`.
-3. Set `id`, `owasp`, `attack_class`, `severity`, and the assertion(s) that detect attack success (or defense, with `attack_succeeded_means: model_passed`).
+2. Create the `.yaml` file inside the matching **Technical Vector** subdirectory (e.g., `prompt_injection/`).
+3. Set the compliance metadata (`owasp`, `atlas`, `nist_ai_rmf`) and the assertion(s) that detect attack success.
 4. Add a citation in `references:` when the attack is documented in the literature.
 5. Run `reagent suites validate redteam_corpus/` to lint the new suite.
 

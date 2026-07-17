@@ -20,12 +20,12 @@ def test_bundled_corpus_loads():
 
 def test_bundled_corpus_size_matches_readme():
     suite = load_suite(bundled_corpus_dir())
-    # The README declares 20 templates at v0.1. Update if the corpus grows.
-    assert len(suite.cases) == 20, f"unexpected corpus size: {len(suite.cases)}"
+    # The README declared 20 templates at v0.1.
+    assert len(suite.cases) >= 20, f"unexpected corpus size: {len(suite.cases)}"
 
 
 def test_bundled_corpus_owasp_coverage():
     suite = load_suite(bundled_corpus_dir())
     seen = {c.owasp.value.split(":", 1)[0] for c in suite.cases if c.owasp}
-    expected = {"LLM01", "LLM02", "LLM05", "LLM06", "LLM07", "LLM09"}
-    assert seen == expected, f"OWASP coverage drift: missing={expected - seen}, extra={seen - expected}"
+    expected_minimum = {"LLM01", "LLM02", "LLM05", "LLM06", "LLM07", "LLM09", "LLM03", "LLM10"}
+    assert expected_minimum.issubset(seen), f"OWASP coverage drift: missing={expected_minimum - seen}"

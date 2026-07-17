@@ -190,4 +190,31 @@ def load_suite(path: str | Path) -> Suite:
     )
 
 
-__all__ = ["SuiteLoadError", "load_suite"]
+def merge_suites(suites: list[Suite]) -> Suite:
+    """Merge multiple loaded suites into a single Suite."""
+    if not suites:
+        raise SuiteLoadError("No suites provided to merge.")
+    if len(suites) == 1:
+        return suites[0]
+        
+    all_cases = []
+    for s in suites:
+        all_cases.extend(s.cases)
+        
+    h = hashlib.sha256()
+    for s in suites:
+        if s.content_sha256:
+            h.update(s.content_sha256.encode("ascii"))
+            
+    merged = Suite(
+        name=f"Merged Suite ({len(suites)} sources)",
+        description="A dynamic suite created by merging multiple sources.",
+        defaults=suites[0].defaults,
+        cases=all_cases,
+    )
+    merged.source_path = "<merged>"
+    merged.content_sha256 = h.hexdigest()
+    return merged
+
+
+__all__ = ["SuiteLoadError", "load_suite", "merge_suites"]

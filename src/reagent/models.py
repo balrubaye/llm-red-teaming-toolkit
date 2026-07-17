@@ -248,6 +248,7 @@ class JudgeConfig(BaseModel):
     rubric: str | None = None
     score_min: float = 4.0
     score_max: float = 5.0
+    temperature: float | None = 0.0
 
 
 class SuiteDefaults(BaseModel):
@@ -280,6 +281,7 @@ class Case(BaseModel):
     attack_class: AttackClass | None = None
     severity: Severity | None = None
     atlas: list[str] = Field(default_factory=list)  # e.g. ["AML.T0051.001"]
+    nist_ai_rmf: list[str] = Field(default_factory=list) # e.g. ["MEASURE-2.4"]
     references: list[str] = Field(default_factory=list)
     attack_succeeded_means: AttackOutcome = AttackOutcome.MODEL_PASSED
 
@@ -376,6 +378,8 @@ class CaseResult(BaseModel):
     attack_class: AttackClass | None = None
     severity: Severity | None = None
     tags: list[str] = Field(default_factory=list)
+    atlas: list[str] = Field(default_factory=list)
+    nist_ai_rmf: list[str] = Field(default_factory=list)
 
 
 class IntervalCI(BaseModel):
@@ -395,6 +399,62 @@ class ClassBreakdown(BaseModel):
     defense_rate_ci_95: IntervalCI
 
 
+ATLAS_NAMES = {
+    "AML.TA0000": "Reconnaissance",
+    "AML.TA0001": "Resource Development",
+    "AML.TA0002": "Initial Access",
+    "AML.TA0003": "Execution",
+    "AML.TA0004": "Persistence",
+    "AML.TA0005": "Privilege Escalation",
+    "AML.TA0006": "Defense Evasion",
+    "AML.TA0007": "Credential Access",
+    "AML.TA0008": "Discovery",
+    "AML.TA0009": "Lateral Movement",
+    "AML.TA0010": "Collection",
+    "AML.TA0011": "Exfiltration",
+    "AML.TA0012": "Impact",
+    "AML.T0051": "LLM Prompt Injection",
+    "AML.T0051.000": "Direct Prompt Injection",
+    "AML.T0051.001": "Indirect Prompt Injection",
+    "AML.T0054": "LLM Leak System Prompts",
+    "AML.T0055": "Model Inversion",
+    "AML.T0057": "LLM Data Exfiltration",
+    "AML.T0058": "Adversarial Fuzzing",
+}
+
+NIST_NAMES = {
+    "GOVERN": "Govern Function",
+    "MAP": "Map Function",
+    "MEASURE": "Measure Function",
+    "MANAGE": "Manage Function",
+    "MEASURE-2.4": "Vulnerability & Robustness Auditing",
+    "MAP-1.1": "Context Characterization",
+    "MANAGE-1.2": "Risk Mitigation & Treatment",
+}
+
+
+class AtlasBreakdown(BaseModel):
+    """Aggregate stats for one MITRE ATLAS tactic or technique."""
+
+    id: str
+    name: str
+    cases: int
+    defended: int
+    defense_rate: float
+    defense_rate_ci_95: IntervalCI
+
+
+class NistBreakdown(BaseModel):
+    """Aggregate stats for one NIST AI RMF function or category."""
+
+    id: str
+    name: str
+    cases: int
+    defended: int
+    defense_rate: float
+    defense_rate_ci_95: IntervalCI
+
+
 class Totals(BaseModel):
     cases: int
     passed: int
@@ -408,6 +468,8 @@ class Totals(BaseModel):
     defense_rate: float | None = None
     defense_rate_ci_95: IntervalCI | None = None
     by_owasp: list[ClassBreakdown] = Field(default_factory=list)
+    by_atlas: list[AtlasBreakdown] = Field(default_factory=list)
+    by_nist: list[NistBreakdown] = Field(default_factory=list)
 
     # Cost & performance
     cost_usd: Decimal = Decimal("0")
@@ -429,6 +491,13 @@ class SuiteMeta(BaseModel):
     name: str
     version: int
     sha256: str | None
+
+
+class AppProfile(BaseModel):
+    """Configuration for simulating an application's architecture."""
+    name: str
+    system_prompt: str | None = None
+    input_template: str | None = None  # e.g., "<user_input>\n{{ payload }}\n</user_input>"
 
 
 class JudgeMeta(BaseModel):
@@ -465,6 +534,37 @@ class Scorecard(BaseModel):
     environment: Environment
 
 
+# ---------------------------------------------------------------------------
+# Project Configuration (reagent.yaml)
+# ---------------------------------------------------------------------------
+
+class ConfigCorpus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    extra_cases: list[str] = Field(default_factory=list)
+
+class ConfigTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: str
+    url: str | None = None
+
+
+class ConfigCompliance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    frameworks: list[str] = Field(default_factory=list)
+    minimum_severity: Severity | None = None
+
+
+class ProjectConfig(BaseModel):
+    """Root configuration for reagent.yaml"""
+    model_config = ConfigDict(extra="forbid")
+    
+    target: ConfigTarget | None = None
+    corpus: ConfigCorpus = Field(default_factory=ConfigCorpus)
+    compliance: ConfigCompliance = Field(default_factory=ConfigCompliance)
+    judge: JudgeConfig | None = None
+    model: str | None = None # Allow setting a default model in config
+
+
 __all__ = [
     "SCHEMA_VERSION",
     "AssertionDef",
@@ -478,6 +578,8 @@ __all__ = [
     "ChatResponse",
     "ChatUsage",
     "ClassBreakdown",
+    "ConfigCompliance",
+    "ConfigTarget",
     "ContainsAnyAssertionDef",
     "Environment",
     "IntervalCI",
@@ -488,6 +590,7 @@ __all__ = [
     "ModelMeta",
     "NotContainsAssertionDef",
     "OwaspLLM",
+    "ProjectConfig",
     "RefusalAssertionDef",
     "RegexAssertionDef",
     "Role",

@@ -25,6 +25,11 @@ def register_adapter(name: str, adapter_cls: type[Adapter]) -> None:
     _registry[name] = adapter_cls
 
 
+# Built-in adapters that don't need entry-points (or can be overridden)
+from reagent.adapters.exec import ScriptAdapter
+register_adapter("exec", ScriptAdapter)
+
+
 def _load_entry_points() -> None:
     global _loaded_from_entry_points
     if _loaded_from_entry_points:

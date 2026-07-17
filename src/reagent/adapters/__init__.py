@@ -11,7 +11,6 @@ from reagent.adapters.registry import (
     register_adapter,
     resolve_adapter,
 )
-
 __all__ = [
     "Adapter",
     "AdapterError",
@@ -20,4 +19,5 @@ __all__ = [
     "available_adapters",
     "register_adapter",
     "resolve_adapter",
+    "ScriptAdapter",
 ]

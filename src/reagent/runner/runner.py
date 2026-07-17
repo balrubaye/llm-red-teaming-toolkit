@@ -16,6 +16,7 @@ from reagent.adapters.base import Adapter, AdapterError, parse_model_string
 from reagent.assertions import evaluate as evaluate_assertion
 from reagent.assertions.base import EvalContext
 from reagent.models import (
+    AppProfile,
     AssertionResult,
     AttackOutcome,
     Case,
@@ -53,6 +54,8 @@ class RunConfig:
     override_params: ChatParams | None = None
     # Optional pinning of the judge model when an assertion did not pin its own.
     default_judge_model: str | None = None
+    # Optional AppProfile to override suite defaults for system-level testing
+    app_profile: AppProfile | None = None
 
 
 @dataclass(slots=True)
@@ -152,6 +155,25 @@ def _build_request(case: Case, suite: Suite, config: RunConfig) -> ChatRequest:
     )
 
     params = ChatParams(temperature=temperature, max_tokens=max_tokens, seed=seed)
+    
+    if config.app_profile:
+        system = config.app_profile.system_prompt or defaults.system
+        input_text = case.input
+        if config.app_profile.input_template and input_text:
+            input_text = config.app_profile.input_template.replace("{{ payload }}", input_text)
+            
+        msgs = []
+        if system:
+            msgs.append(Message(role=Role.SYSTEM, content=system))
+        if input_text:
+            msgs.append(Message(role=Role.USER, content=input_text))
+            
+        return ChatRequest(
+            model=config.model,
+            messages=tuple(msgs),
+            params=params,
+        )
+
     messages = case.build_messages(default_system=defaults.system)
 
     return ChatRequest(
@@ -189,6 +211,8 @@ async def _run_one(
             attack_class=case.attack_class,
             severity=case.severity,
             tags=list(case.tags),
+            atlas=list(case.atlas),
+            nist_ai_rmf=list(case.nist_ai_rmf),
         )
 
     # 2. Patch judge models if the case left them unspecified and we have a
@@ -258,6 +282,8 @@ async def _run_one(
         attack_class=case.attack_class,
         severity=case.severity,
         tags=list(case.tags),
+        atlas=list(case.atlas),
+        nist_ai_rmf=list(case.nist_ai_rmf),
     )
 
 
@@ -271,6 +297,8 @@ def _skipped_result(case: Case, reason: str) -> CaseResult:
         attack_class=case.attack_class,
         severity=case.severity,
         tags=list(case.tags),
+        atlas=list(case.atlas),
+        nist_ai_rmf=list(case.nist_ai_rmf),
     )
 
 
@@ -315,6 +343,7 @@ async def run_suite(suite: Suite, config: RunConfig) -> RunResult:
                 case_id=c.id, passed=False, error=f"unhandled error: {exc}",
                 owasp=c.owasp, attack_class=c.attack_class,
                 severity=c.severity, tags=list(c.tags),
+                atlas=list(c.atlas), nist_ai_rmf=list(c.nist_ai_rmf),
             )
 
     try:

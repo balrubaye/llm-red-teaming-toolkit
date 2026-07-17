@@ -71,6 +71,12 @@ _TEMPLATE = """<!doctype html>
   }
   .footer { color: var(--muted); font-size: 12px; margin-top: 32px; }
   .ci { color: var(--muted); font-size: 12px; }
+  .tabs { display: flex; border-bottom: 2px solid var(--border); margin: 28px 0 16px; }
+  .tab-btn { background: none; border: none; color: var(--muted); font: inherit; font-weight: 600;
+             padding: 10px 16px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
 </style>
 </head>
 <body>
@@ -107,24 +113,86 @@ _TEMPLATE = """<!doctype html>
     </div>
   </div>
 
-  {% if scorecard.is_redteam and totals.by_owasp %}
-    <h2>Defense rate by OWASP class</h2>
-    <table>
-      <thead><tr>
-        <th>Class</th><th>Cases</th><th>Defended</th><th>Defense rate</th><th>95% CI</th>
-      </tr></thead>
-      <tbody>
-      {% for b in totals.by_owasp %}
-        <tr>
-          <td>{{ b.owasp.value }}</td>
-          <td>{{ b.cases }}</td>
-          <td>{{ b.defended }}</td>
-          <td>{{ pct(b.defense_rate) }}</td>
-          <td class="ci">{{ ci_str(b.defense_rate_ci_95) }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+  {% if scorecard.is_redteam %}
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(this, 'owasp')">OWASP LLM Top 10</button>
+      <button class="tab-btn" onclick="switchTab(this, 'mitre')">MITRE ATLAS</button>
+      <button class="tab-btn" onclick="switchTab(this, 'nist')">NIST AI RMF</button>
+    </div>
+
+    <!-- OWASP Content -->
+    <div id="tab-owasp" class="tab-content active">
+      {% if totals.by_owasp %}
+        <table>
+          <thead><tr>
+            <th>Class</th><th>Cases</th><th>Defended</th><th>Defense rate</th><th>95% CI</th>
+          </tr></thead>
+          <tbody>
+          {% for b in totals.by_owasp %}
+            <tr>
+              <td>{{ b.owasp.value }}</td>
+              <td>{{ b.cases }}</td>
+              <td>{{ b.defended }}</td>
+              <td>{{ pct(b.defense_rate) }}</td>
+              <td class="ci">{{ ci_str(b.defense_rate_ci_95) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="meta">No cases matching OWASP taxonomy found in this run.</p>
+      {% endif %}
+    </div>
+
+    <!-- MITRE ATLAS Content -->
+    <div id="tab-mitre" class="tab-content">
+      {% if totals.by_atlas %}
+        <table>
+          <thead><tr>
+            <th>Technique/Tactic</th><th>ID</th><th>Cases</th><th>Defended</th><th>Defense rate</th><th>95% CI</th>
+          </tr></thead>
+          <tbody>
+          {% for b in totals.by_atlas %}
+            <tr>
+              <td>{{ b.name }}</td>
+              <td><code>{{ b.id }}</code></td>
+              <td>{{ b.cases }}</td>
+              <td>{{ b.defended }}</td>
+              <td>{{ pct(b.defense_rate) }}</td>
+              <td class="ci">{{ ci_str(b.defense_rate_ci_95) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="meta">No cases tagged with MITRE ATLAS identifiers found in this run.</p>
+      {% endif %}
+    </div>
+
+    <!-- NIST AI RMF Content -->
+    <div id="tab-nist" class="tab-content">
+      {% if totals.by_nist %}
+        <table>
+          <thead><tr>
+            <th>Function/Category</th><th>ID</th><th>Cases</th><th>Defended</th><th>Defense rate</th><th>95% CI</th>
+          </tr></thead>
+          <tbody>
+          {% for b in totals.by_nist %}
+            <tr>
+              <td>{{ b.name }}</td>
+              <td><code>{{ b.id }}</code></td>
+              <td>{{ b.cases }}</td>
+              <td>{{ b.defended }}</td>
+              <td>{{ pct(b.defense_rate) }}</td>
+              <td class="ci">{{ ci_str(b.defense_rate_ci_95) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="meta">No cases tagged with NIST AI RMF categories found in this run.</p>
+      {% endif %}
+    </div>
   {% endif %}
 
   <h2>Cases</h2>
@@ -213,6 +281,14 @@ _TEMPLATE = """<!doctype html>
   // Embed the raw scorecard so the file is self-describing.
   window.SCORECARD = {{ scorecard_json|safe }};
 
+  function switchTab(btn, tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    btn.classList.add('active');
+    document.getElementById('tab-' + tabId).classList.add('active');
+  }
+
   function filterCases() {
     const q = document.getElementById('filter').value.trim().toLowerCase();
     const status = document.getElementById('status').value;
@@ -261,7 +337,12 @@ def render_html(scorecard: Scorecard, path: str | Path | None = None) -> str:
 
     # Embed the scorecard JSON for downstream tooling. Pydantic v2 handles
     # Decimal / datetime serialization in `mode="json"`.
-    scorecard_json = json.dumps(scorecard.model_dump(mode="json"), separators=(",", ":"))
+    scorecard_json = (
+        json.dumps(scorecard.model_dump(mode="json"), separators=(",", ":"))
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
 
     rendered = tmpl.render(
         title=title,
